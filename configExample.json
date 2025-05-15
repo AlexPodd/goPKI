@@ -1,0 +1,27 @@
+{
+  "trustPath": "cmd/web/trustCertificate",
+  "keyPath": "cmd/web/root/ca/intermediate/private",
+  "rootCACertificatePath": "cmd/web/trustCertificate/ca.cert.pem",
+  "tlsServerCert": "cmd/web/tls/serverTLS.crt",
+  "tlsServerKey": "cmd/web/tls/keyTLS.pem",
+  "validationDays": 180,
+   "database": {
+    "user": "root",
+    "password": "",
+    "host": "localhost",
+    "port": 3306,
+    "name": "pki"
+  },
+  "caKeys": [
+    {
+      "certFile": "intermediate.cert.pem",
+      "keyFile": "intermediate.key.pem",
+      "password": ""
+    },
+    {
+      "certFile": "intermediate1.cert.pem",
+      "keyFile": "intermediate1.key.pem",
+      "password": ""
+    }
+  ]
+}

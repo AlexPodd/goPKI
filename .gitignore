@@ -1,0 +1,20 @@
+# Конфигурация и ключи
+config.json
+*.pem
+*.key
+*.crt
+
+# Служебные файлы
+*.log
+*.tmp
+
+# Бинарники
+*.exe
+*.out
+*.bin
+
+# Папки
+vendor/
+node_modules/
+build/
+dist/

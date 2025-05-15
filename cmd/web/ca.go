@@ -52,6 +52,11 @@ func (ca *certificateAutor) createCertificate(csr *x509.CertificateRequest) (*x5
 }
 
 func (ca *certificateAutor) canUse() bool {
+	if err := ca.cert.CheckSignatureFrom(ca.rootCA); err != nil {
+		log.Print(err.Error())
+		return false
+	}
+
 	return time.Until(ca.cert.NotAfter) >= time.Duration(ca.validateClientDate)*24*time.Hour
 }
 

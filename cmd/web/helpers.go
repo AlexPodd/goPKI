@@ -128,7 +128,7 @@ func loadConfig(filename string) (*AppConfig, error) {
 	return &config, nil
 }
 
-func loadCAFromConfig(cfg *AppConfig, trust []*x509.Certificate) ([]*certificateAutor, error) {
+func loadCAFromConfig(cfg *AppConfig, trust []*x509.Certificate, rootCA *x509.Certificate) ([]*certificateAutor, error) {
 	var cas []*certificateAutor
 
 	for _, ca := range cfg.CAKeys {
@@ -151,6 +151,7 @@ func loadCAFromConfig(cfg *AppConfig, trust []*x509.Certificate) ([]*certificate
 			privateKey:         key,
 			trust:              trust,
 			validateClientDate: cfg.ValidationDays,
+			rootCA:             rootCA,
 		})
 	}
 

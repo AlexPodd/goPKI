@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -24,6 +25,7 @@ type certificateAutor struct {
 	privateKey         *rsa.PrivateKey
 	trust              []*x509.Certificate
 	validateClientDate int
+	rootCA             *x509.Certificate
 }
 
 type application struct {
@@ -43,22 +45,46 @@ type CAKeyConfig struct {
 }
 
 type AppConfig struct {
-	TrustPath      string        `json:"trustPath"`
-	KeyPath        string        `json:"keyPath"`
-	TlsServerCert  string        `json:"tlsServerCert"`
-	TlsServerKey   string        `json:"tlsServerKey"`
-	ValidationDays int           `json:"validationDays"`
-	CAKeys         []CAKeyConfig `json:"caKeys"`
+	TrustPath             string        `json:"trustPath"`
+	KeyPath               string        `json:"keyPath"`
+	TlsServerCert         string        `json:"tlsServerCert"`
+	TlsServerKey          string        `json:"tlsServerKey"`
+	ValidationDays        int           `json:"validationDays"`
+	RootCACertificatePath string        `json:"rootCACertificatePath"`
+	CAKeys                []CAKeyConfig `json:"caKeys"`
+	Database              DBConfig      `json:"database"`
+}
+
+type DBConfig struct {
+	User     string `json:"user"`
+	Password string `json:"password"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Name     string `json:"name"`
 }
 
 func main() {
-	addr := flag.String("addr", ":8081", "HTTP network address")
-	dsn := flag.String("dsn", "root:podushko2004#@/pki?parseTime=true", "MySQL data source name")
-	flag.Parse()
+
 	infoLog := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
 	errorLog := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
 
-	db, err := openDB(*dsn)
+	config, err := loadConfig("config.json")
+	if err != nil {
+		errorLog.Fatal("Error loading config: ", err)
+	}
+
+	addr := flag.String("addr", ":8081", "HTTP network address")
+	//dsn := flag.String("dsn", "root:password@/pki?parseTime=true", "MySQL data source name")
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true",
+		config.Database.User,
+		config.Database.Password,
+		config.Database.Host,
+		config.Database.Port,
+		config.Database.Name,
+	)
+	flag.Parse()
+
+	db, err := openDB(dsn)
 	if err != nil {
 		errorLog.Fatal(err)
 	}
@@ -69,17 +95,17 @@ func main() {
 	// Initialize a decoder instance...
 	formDecoder := form.NewDecoder()
 
-	config, err := loadConfig("config.json")
-	if err != nil {
-		errorLog.Fatal("Error loading config: ", err)
-	}
-
 	trust, err := loadTrustCertificates(config.TrustPath)
 	if err != nil {
 		errorLog.Fatal("Error loading trust certificates:", err)
 	}
 
-	cas, err := loadCAFromConfig(config, trust)
+	rootCA, err := LoadCertificateFromFile(config.RootCACertificatePath)
+	if err != nil {
+		errorLog.Fatal("Error loading root CA:", err)
+	}
+
+	cas, err := loadCAFromConfig(config, trust, rootCA)
 	if err != nil {
 		errorLog.Fatal("Error loading CA:", err)
 	}
