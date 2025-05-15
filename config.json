@@ -1,0 +1,19 @@
+{
+  "trustPath": "cmd/web/trustCertificate",
+  "keyPath": "cmd/web/root/ca/intermediate/private",
+  "tlsServerCert": "cmd/web/tls/serverTLS.crt",
+  "tlsServerKey": "cmd/web/tls/keyTLS.pem",
+  "validationDays": 180,
+  "caKeys": [
+    {
+      "certFile": "intermediate.cert.pem",
+      "keyFile": "intermediate.key.pem",
+      "password": "password"
+    },
+    {
+      "certFile": "intermediate1.cert.pem",
+      "keyFile": "intermediate1.key.pem",
+      "password": "password"
+    }
+  ]
+}

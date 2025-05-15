@@ -1,7 +1,9 @@
 package models
 
 import (
+	"crypto/x509"
 	"database/sql"
+	"encoding/pem"
 	"errors"
 	"math/big"
 	"strings"
@@ -37,6 +39,47 @@ func (m *CertificateModel) Insert(username string, serial big.Int, validFrom tim
 		return err
 	}
 	return nil
+}
+
+func (m *CertificateModel) FindForSerialCertificate(serial big.Int) (string, error) {
+	serialStr := serial.String()
+
+	var certificate string
+	query := `SELECT certificate FROM certificates WHERE serial_number = ?`
+
+	err := m.DB.QueryRow(query, serialStr).Scan(&certificate)
+	if err != nil {
+		return certificate, err
+	}
+
+	return certificate, nil
+}
+
+func (m *CertificateModel) FindForCN(CN string) (*x509.Certificate, error) {
+	var certificate string
+	query := `SELECT certificate FROM certificates WHERE username = ?`
+	err := m.DB.QueryRow(query, CN).Scan(&certificate)
+	if err != nil {
+		return nil, err
+	}
+
+	block, _ := pem.Decode([]byte(certificate))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, err
+	}
+
+	clientCert, err := x509.ParseCertificate(block.Bytes)
+
+	if err != nil {
+		return nil, err
+	}
+	return clientCert, nil
+}
+
+func (m *CertificateModel) DeleteForCN(CN string) error {
+	query := `DELETE FROM certificates WHERE username = ?`
+	_, err := m.DB.Exec(query, CN)
+	return err
 }
 
 func (m *CertificateModel) FindForSerialOCSP(serial big.Int) (int, error) {

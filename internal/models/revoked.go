@@ -17,6 +17,12 @@ type RevokedCertificateModel struct {
 	DB *sql.DB
 }
 
+func (m *RevokedCertificateModel) Revoke(serial big.Int, reason int) error {
+	stmt := `INSERT INTO revoked_certificates (cert_id, revoked_at, reason) VALUES(?, ?, ?)`
+	_, err := m.DB.Exec(stmt, serial.String(), time.Now(), reason)
+	return err
+}
+
 func (m *RevokedCertificateModel) FindSerial(serial big.Int) (bool, error) {
 	serialStr := serial.String()
 	var exists bool

@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -12,7 +13,6 @@ import (
 )
 
 func (ca *certificateAutor) createCertificate(csr *x509.CertificateRequest) (*x509.Certificate, []byte, error) {
-
 	num, err := generateSerialNumber()
 	if err != nil {
 		return nil, nil, err
@@ -31,11 +31,21 @@ func (ca *certificateAutor) createCertificate(csr *x509.CertificateRequest) (*x5
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: false,
 		IsCA:                  false,
+		EmailAddresses:        csr.EmailAddresses,
 	}
 
 	template.DNSNames = csr.DNSNames
 	template.IPAddresses = csr.IPAddresses
 
+	if len(ca.cert.SubjectKeyId) == 0 {
+		pubBytes, err := x509.MarshalPKIXPublicKey(ca.cert.PublicKey)
+		if err == nil {
+			sum := sha256.New().Sum(pubBytes)
+			ca.cert.SubjectKeyId = sum[:]
+		}
+	}
+
+	template.AuthorityKeyId = ca.cert.SubjectKeyId
 	certificate, err := x509.CreateCertificate(rand.Reader, template, ca.cert, csr.PublicKey, ca.privateKey)
 
 	return template, certificate, err
@@ -61,7 +71,15 @@ func generateSerialNumber() (*big.Int, error) {
 func (ca *certificateAutor) findIsUser(user *x509.Certificate) (*x509.Certificate, error) {
 	for _, cas := range ca.trust {
 		if user.Issuer.CommonName == cas.Subject.CommonName {
-			// Если нашли совпадение с общим именем (CN), то это подходящий УЦ
+			if !cas.IsCA {
+				return nil, errors.New("issuer is not a CA")
+			}
+			if cas.KeyUsage&x509.KeyUsageCertSign == 0 {
+				return nil, errors.New("issuer cannot sign certificates (missing KeyUsageCertSign)")
+			}
+			if err := user.CheckSignatureFrom(cas); err != nil {
+				return nil, errors.New("подпись недействительна: %v" + err.Error())
+			}
 			return cas, nil
 		}
 	}

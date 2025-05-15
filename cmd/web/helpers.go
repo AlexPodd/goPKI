@@ -3,12 +3,18 @@ package main
 import (
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime/debug"
+	"strings"
+
+	"github.com/youmark/pkcs8"
 )
 
 // The serverError helper writes an error message and stack trace to the errorLog,
@@ -42,7 +48,7 @@ func (app *application) notFound(w http.ResponseWriter) {
 	app.clientError(w, http.StatusNotFound)
 }
 
-func LoadPrivateKeyFromFile(path string) (*rsa.PrivateKey, error) {
+func LoadPrivateKeyFromFile(path string, password []byte) (*rsa.PrivateKey, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -53,16 +59,17 @@ func LoadPrivateKeyFromFile(path string) (*rsa.PrivateKey, error) {
 		return nil, errors.New("failed to decode PEM block with private key")
 	}
 
-	switch block.Type {
-	case "RSA PRIVATE KEY":
-		return x509.ParsePKCS1PrivateKey(block.Bytes)
-	case "PRIVATE KEY":
-		res, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-		key := res.(*rsa.PrivateKey)
-		return key, err
-	default:
-		return nil, errors.New("unsupported private key type: " + block.Type)
+	key, err := pkcs8.ParsePKCS8PrivateKey(block.Bytes, []byte(password))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse encrypted private key: %v", err)
 	}
+
+	rsaPrivateKey, ok := key.(*rsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("key is not an RSA private key")
+	}
+
+	return rsaPrivateKey, nil
 }
 
 func LoadCertificateFromFile(path string) (*x509.Certificate, error) {
@@ -82,4 +89,70 @@ func LoadCertificateFromFile(path string) (*x509.Certificate, error) {
 	}
 
 	return cert, nil
+}
+
+func loadTrustCertificates(dir string) ([]*x509.Certificate, error) {
+	var certs []*x509.Certificate
+
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, file := range files {
+		if file.IsDir() || !(strings.HasSuffix(file.Name(), ".pem") || strings.HasSuffix(file.Name(), ".crt")) {
+			continue
+		}
+
+		certPath := filepath.Join(dir, file.Name())
+		cert, err := LoadCertificateFromFile(certPath)
+		if err != nil {
+			log.Printf("Не удалось загрузить сертификат из %s: %v", certPath, err)
+			continue
+		}
+		certs = append(certs, cert)
+	}
+	return certs, nil
+}
+
+func loadConfig(filename string) (*AppConfig, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	var config AppConfig
+	err = json.Unmarshal(data, &config)
+	if err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+func loadCAFromConfig(cfg *AppConfig, trust []*x509.Certificate) ([]*certificateAutor, error) {
+	var cas []*certificateAutor
+
+	for _, ca := range cfg.CAKeys {
+		certPath := filepath.Join(cfg.TrustPath, ca.CertFile)
+		keyPath := filepath.Join(cfg.KeyPath, ca.KeyFile)
+
+		cert, err := LoadCertificateFromFile(certPath)
+		if err != nil {
+			log.Printf("Ошибка загрузки CA-сертификата %s: %v", certPath, err)
+			continue
+		}
+		key, err := LoadPrivateKeyFromFile(keyPath, []byte(ca.Password))
+		if err != nil {
+			log.Printf("Ошибка загрузки ключа %s: %v", keyPath, err)
+			continue
+		}
+
+		cas = append(cas, &certificateAutor{
+			cert:               cert,
+			privateKey:         key,
+			trust:              trust,
+			validateClientDate: cfg.ValidationDays,
+		})
+	}
+
+	return cas, nil
 }

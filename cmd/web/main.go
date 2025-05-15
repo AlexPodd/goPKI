@@ -36,6 +36,21 @@ type application struct {
 	cas                  []*certificateAutor
 }
 
+type CAKeyConfig struct {
+	CertFile string `json:"certFile"`
+	KeyFile  string `json:"keyFile"`
+	Password string `json:"password"`
+}
+
+type AppConfig struct {
+	TrustPath      string        `json:"trustPath"`
+	KeyPath        string        `json:"keyPath"`
+	TlsServerCert  string        `json:"tlsServerCert"`
+	TlsServerKey   string        `json:"tlsServerKey"`
+	ValidationDays int           `json:"validationDays"`
+	CAKeys         []CAKeyConfig `json:"caKeys"`
+}
+
 func main() {
 	addr := flag.String("addr", ":8081", "HTTP network address")
 	dsn := flag.String("dsn", "root:podushko2004#@/pki?parseTime=true", "MySQL data source name")
@@ -54,49 +69,20 @@ func main() {
 	// Initialize a decoder instance...
 	formDecoder := form.NewDecoder()
 
-	//Срок сертификации
-	validateClientDate := 180
-
-	var ca1, ca2, root *x509.Certificate
-	var key1, key2 *rsa.PrivateKey
-	var trust []*x509.Certificate
-
-	ca1, err = LoadCertificateFromFile("./trustCertificate/intermediate.crt")
-	ca2, err = LoadCertificateFromFile("./trustCertificate/intermediate1.crt")
-	root, err = LoadCertificateFromFile("./trustCertificate/ca.crt")
-
-	key1, err = LoadPrivateKeyFromFile("./keys/intermediateCA.key")
-	key2, err = LoadPrivateKeyFromFile("./keys/intermediateCA1.key")
-
-	trust = append(trust, ca1, ca2, root)
-
-	caCertPool := x509.NewCertPool()
-	caCertPool.AddCert(ca1)
-	caCertPool.AddCert(ca2)
-	caCertPool.AddCert(root)
-
-	ca1Class := &certificateAutor{
-		cert:               ca1,
-		privateKey:         key1,
-		trust:              trust,
-		validateClientDate: validateClientDate,
-	}
-
-	ca2Class := &certificateAutor{
-		cert:               ca2,
-		privateKey:         key2,
-		trust:              trust,
-		validateClientDate: validateClientDate,
-	}
-
-	var cas []*certificateAutor
-
-	cas = append(cas, ca1Class, ca2Class)
-
+	config, err := loadConfig("config.json")
 	if err != nil {
-		errorLog.Print(err.Error())
+		errorLog.Fatal("Error loading config: ", err)
 	}
 
+	trust, err := loadTrustCertificates(config.TrustPath)
+	if err != nil {
+		errorLog.Fatal("Error loading trust certificates:", err)
+	}
+
+	cas, err := loadCAFromConfig(config, trust)
+	if err != nil {
+		errorLog.Fatal("Error loading CA:", err)
+	}
 	app := &application{
 		errorLog:             errorLog,
 		infoLog:              infoLog,
@@ -112,13 +98,12 @@ func main() {
 	// assembly implementations are used.
 	tlsConfig := &tls.Config{
 		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
-		ClientAuth:       tls.RequestClientCert,
 	}
 	// Set the server's TLSConfig field to use the tlsConfig variable we just
 	// created.
 	handler := app.routes()
 	corshandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3001"},
+		AllowedOrigins:   []string{"https://localhost:3001"},
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: true,
@@ -134,7 +119,7 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 	}
 	infoLog.Printf("Starting server on %s", *addr)
-	err = srv.ListenAndServeTLS("./tls/serverTLS.crt", "./tls/keyTLS.pem")
+	err = srv.ListenAndServeTLS(config.TlsServerCert, config.TlsServerKey)
 	errorLog.Fatal(err)
 }
 

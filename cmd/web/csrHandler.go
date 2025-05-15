@@ -32,7 +32,7 @@ func (app *application) createCertificate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	err = checkSert(csr, app)
+	err = CheckSert(csr, app)
 	if err != nil {
 		app.errorLog.Print(err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -44,12 +44,6 @@ func (app *application) createCertificate(w http.ResponseWriter, r *http.Request
 			continue
 		}
 		bdCert, cert, err := ca.createCertificate(csr)
-
-		if err != nil {
-			app.errorLog.Print(err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
 
 		certPEM := pem.EncodeToMemory(&pem.Block{
 			Type:  "CERTIFICATE",
@@ -87,7 +81,7 @@ func (app *application) createCertificate(w http.ResponseWriter, r *http.Request
 	http.Error(w, "No avaible ca", http.StatusBadRequest)
 }
 
-func checkSert(csr *x509.CertificateRequest, app *application) error {
+func CheckSert(csr *x509.CertificateRequest, app *application) error {
 	if csr.CheckSignature() != nil {
 		return errors.New("invalid CSR sign")
 	}

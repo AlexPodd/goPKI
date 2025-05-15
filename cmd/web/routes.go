@@ -20,9 +20,12 @@ func (app *application) routes() http.Handler {
 	//обработка ocsp запросов
 	router.Handler(http.MethodPost, "/application/ocsp-request", alice.New().ThenFunc(app.ocsp_server))
 
-	dynamic := alice.New(noSurf, app.authenticate)
-	router.Handler(http.MethodGet, "/secure", dynamic.ThenFunc(app.secure))
-	router.Handler(http.MethodPost, "/api/ocsp-request/serial", dynamic.ThenFunc(app.ocsp_server_serial))
+	router.Handler(http.MethodPost, "/api/ocsp-request/serial", alice.New().ThenFunc(app.ocsp_server_serial))
+
+	router.Handler(http.MethodPost, "/api/findUserInfo", alice.New().ThenFunc(app.findUserInfo))
+
+	router.Handler(http.MethodPost, "/api/createNewCert", alice.New().ThenFunc(app.createNewCert))
+
 	//router.Handler(http.MethodPost, "/api/cert/sign", dynamic.ThenFunc(app.createCertificate))
 
 	//protected := dynamic.Append(app.requireAuthentication)

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>PKCS#10 CSR Generator</title>
+    <style>
+        body {
+          font-family: Arial, sans-serif;
+          margin: 2rem;
+          background: #f0f0f5;
+        }
+        h1 {
+          color: #333;
+        }
+        label, input, button {
+          display: block;
+          margin: 0.5rem 0;
+        }
+        input {
+          padding: 0.5rem;
+          width: 300px;
+          max-width: 100%;
+        }
+        button {
+          padding: 0.5rem 1rem;
+          background: #4CAF50;
+          color: white;
+          border: none;
+          cursor: pointer;
+        }
+        button:hover {
+          background: #45a049;
+        }
+        pre {
+          background: white;
+          padding: 1rem;
+          border: 1px solid #ccc;
+          margin-top: 1rem;
+          white-space: pre-wrap;
+          max-height: 300px;
+          overflow-y: auto;
+        }
+        a {
+          margin-top: 0.5rem;
+          display: inline-block;
+        }
+    </style>
+</head>
+<div class="nav">
+    <a href="/">Generate new Certificate</a>
+    <a href="/getUserInfo.html">User certificate info</a>
+    <a href="/cert-check.html">Check Certificate</a>
+    <a href="/createNewCertificate.html">Regenerate Certificate</a>
+</div>
+<body>
+<h1>CSR Generator</h1>
+
+<label for="username">Name:</label>
+<input type="text" id="username" placeholder="Enter your name" />
+<input type="text" id="email" placeholder="Enter your email" />
+<label for="privateKey">Private Key (PEM format):</label>
+<textarea id="privateKey" placeholder="-----BEGIN PRIVATE KEY-----..." rows="10" cols="60"></textarea>
+
+<button id="submitCsr">Generate & Send CSR</button>
+
+<pre id="output"></pre>
+
+<a id="download-key" style="display:none;" download="privateKey.pem">Download new Private Key</a><br>
+<a id="download-cert" style="display:none;" download="certificate.pem">Download new Certificate</a>
+
+<script type="module" src="/createNewCertificate.js"></script>
+</body>
+</html>

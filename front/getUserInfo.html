@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User certificate info</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2rem;
+            background: #f0f0f5;
+        }
+        h1 {
+            color: #333;
+        }
+        label, input, button {
+            display: block;
+            margin: 0.5rem 0;
+        }
+        input {
+            padding: 0.5rem;
+            width: 300px;
+            max-width: 100%;
+        }
+        button {
+            padding: 0.5rem 1rem;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        pre {
+            background: white;
+            padding: 1rem;
+            border: 1px solid #ccc;
+            margin-top: 1rem;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .nav {
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="nav">
+    <a href="/">Generate CSR</a>
+    <a href="/getUserInfo.html">User certificate info</a>
+    <a href="/cert-check.html">Check Certificate</a>
+    <a href="/createNewCertificate.html">Regenerate Certificate</a>
+</div>
+
+<h1>Request Certificate Information</h1>
+
+<label for="name">User Name:</label>
+<input type="text" id="name" placeholder="Enter user name">
+<button id="getUserInfo">Request Certificate</button>
+
+
+<pre id="output"></pre>
+<a id="download-cert" style="display: none;">Download Certificate</a>
+
+<script type="module" src="/getUserInfo.js"></script>
+</body>
+</html>

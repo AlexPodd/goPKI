@@ -5,9 +5,13 @@ import (
 	"crypto"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"database/sql"
 	"encoding/asn1"
+	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"io"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -15,7 +19,6 @@ import (
 )
 
 func (app *application) ocspCheck(req []byte, issuer *x509.Certificate) (*ocsp.Response, error) {
-
 	ocspURL := "https://localhost:8081/application/ocsp-request"
 	httpResp, err := http.Post(ocspURL, "application/ocsp-request", bytes.NewReader(req))
 	if err != nil {
@@ -194,5 +197,155 @@ func (app *application) secure(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("<html><body><h1>доступ получен</h1></body></html>"))
 }
 
+type serialRequest struct {
+	Serial string `json:"serial"`
+}
+
 func (app *application) ocsp_server_serial(w http.ResponseWriter, r *http.Request) {
+	var req serialRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	bigInt := new(big.Int)
+	_, ok := bigInt.SetString(req.Serial, 10)
+	if !ok {
+		http.Error(w, "Serial number is corrupt", http.StatusUnauthorized)
+		return
+	}
+	exist, err := app.revoked_certificates.FindSerial(*bigInt)
+	if err != nil {
+		unkwownOrError(err, w, app)
+		return
+	}
+	if exist {
+		ocspRevoked(w, app, req.Serial)
+		return
+	}
+
+	cert, err := app.certificates.FindForSerialCertificate(*bigInt)
+	if err != nil {
+		unkwownOrError(err, w, app)
+		return
+	}
+
+	block, _ := pem.Decode([]byte(cert))
+	if block == nil || block.Type != "CERTIFICATE" {
+		app.errorLog.Print(err)
+		http.Error(w, "Error parsing certificate", http.StatusUnauthorized)
+		return
+	}
+
+	clientCert, err := x509.ParseCertificate(block.Bytes)
+
+	if err != nil {
+		app.errorLog.Print(err)
+		http.Error(w, "Error parsing certificate", http.StatusUnauthorized)
+		return
+	}
+
+	isUser, err := app.cas[0].findIsUser(clientCert)
+	if isUser == nil || err != nil {
+		app.errorLog.Print(err)
+		http.Error(w, "Unknown certificate issuer", http.StatusUnauthorized)
+		return
+	}
+
+	ocspreq, err := ocsp.CreateRequest(clientCert, isUser, &ocsp.RequestOptions{
+		Hash: crypto.SHA256,
+	})
+
+	if ocspreq == nil || err != nil {
+		app.errorLog.Print(err)
+		http.Error(w, "OCSP check failed", http.StatusUnauthorized)
+		return
+	}
+
+	ocspResp, err := app.ocspCheck(ocspreq, isUser)
+	if err != nil {
+		app.errorLog.Print(err)
+		http.Error(w, "Certificate revoked or OCSP check failed", http.StatusUnauthorized)
+		return
+
+	}
+	writeOCSPResponce(ocspResp, req, w)
+}
+
+func writeOCSPResponce(ocspResp *ocsp.Response, req serialRequest, w http.ResponseWriter) {
+	response := struct {
+		Serial    string `json:"serial"`
+		OCSP      string `json:"OCSP"`
+		Status    string `json:"status"`
+		Timestamp string `json:"timestamp"`
+	}{
+		Serial:    req.Serial,
+		OCSP:      ocspStatus(ocspResp.Status), // Преобразуем статус в строку
+		Status:    "success",
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, `{"error": "Failed to encode response"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.WriteHeader(http.StatusOK)
+}
+
+func unkwownOrError(err error, w http.ResponseWriter, app *application) {
+	app.errorLog.Print(err)
+	if err == sql.ErrNoRows {
+		response := struct {
+			OCSP string `json:"OCSP"`
+		}{
+			OCSP: ocspStatus(ocsp.Unknown),
+		}
+		w.Header().Set("Content-Type", "application/x-pem-file")
+		w.WriteHeader(http.StatusOK)
+		err = json.NewEncoder(w).Encode(response)
+		if err != nil {
+			app.errorLog.Print(err)
+			http.Error(w, "Error encoding responce", http.StatusUnauthorized)
+			return
+		}
+		return
+	}
+
+	http.Error(w, "Error parsing certificate", http.StatusUnauthorized)
+}
+
+func ocspRevoked(w http.ResponseWriter, app *application, serial string) {
+	response := struct {
+		Serial    string `json:"serial"`
+		OCSP      string `json:"OCSP"`
+		Timestamp string `json:"timestamp"`
+	}{
+		Serial:    serial,
+		OCSP:      ocspStatus(ocsp.Revoked),
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	w.WriteHeader(http.StatusOK)
+	err := json.NewEncoder(w).Encode(response)
+	if err != nil {
+		app.errorLog.Print(err)
+		http.Error(w, "Error encoding responce", http.StatusUnauthorized)
+		return
+	}
+	return
+}
+
+func ocspStatus(status int) string {
+	switch status {
+	case 0:
+		return "good"
+	case 1:
+		return "revoked"
+	case 2:
+		return "unknown"
+	}
+	return ""
 }
